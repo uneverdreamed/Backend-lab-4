@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="Seismic.Workflows.Api/Seismic.Workflows.Api.csproj" />
+  <Project Path="Seismic.Workflows.Contracts/Seismic.Workflows.Contracts.csproj" />
+  <Project Path="Seismic.Workflows.Worker/Seismic.Workflows.Worker.csproj" />
+</Solution>
