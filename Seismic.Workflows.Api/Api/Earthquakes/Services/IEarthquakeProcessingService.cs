@@ -8,4 +8,5 @@ public interface IEarthquakeProcessingService
     Task<IReadOnlyList<StartProcessingResponse>> StartDemoBatchAsync(DemoBatchRequest request);
     Task ConfirmAsync(long earthquakeId, ConfirmRequest request);
     Task<ProcessingStatusResponse> GetStatusAsync(long earthquakeId);
+    Task<IReadOnlyList<ProcessListItem>> ListAsync(int limit);
 }

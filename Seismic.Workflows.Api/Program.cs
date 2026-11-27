@@ -24,7 +24,10 @@ var app = builder.Build();
 app.UseSwagger();
 app.UseSwaggerUI();
 
+app.UseStaticFiles();
+
 app.MapGet("/", () => Results.Redirect("/swagger"));
+app.MapGet("/processes", () => Results.Redirect("/processes.html"));
 app.MapControllers();
 
 app.Run();

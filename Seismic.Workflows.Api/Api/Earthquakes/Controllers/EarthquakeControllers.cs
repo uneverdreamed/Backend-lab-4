@@ -35,6 +35,11 @@ public sealed class EarthquakesController(IEarthquakeProcessingService service) 
             return (IActionResult)Accepted();
         });
 
+    [HttpGet]
+    [ProducesResponseType<IReadOnlyList<ProcessListItem>>(StatusCodes.Status200OK)]
+    public Task<IActionResult> List([FromQuery] int limit = 30) =>
+        Handle(async () => (IActionResult)Ok(await service.ListAsync(Math.Clamp(limit, 1, 100))));
+
     [HttpGet("{earthquakeId:long}")]
     [ProducesResponseType<ProcessingStatusResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

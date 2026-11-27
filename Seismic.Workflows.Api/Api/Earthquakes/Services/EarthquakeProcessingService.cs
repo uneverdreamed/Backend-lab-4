@@ -214,6 +214,79 @@ public sealed class EarthquakeProcessingService : IEarthquakeProcessingService
         }
     }
 
+    public async Task<IReadOnlyList<ProcessListItem>> ListAsync(int limit)
+    {
+        try
+        {
+            // Список берётся из visibility-хранилища Temporal: новые процессы сверху
+            var executions = new List<WorkflowExecution>();
+            await foreach (var execution in _client.ListWorkflowsAsync(
+                $"WorkflowType = '{TemporalNames.WorkflowName}'"))
+            {
+                executions.Add(execution);
+                if (executions.Count >= limit) break;
+            }
+
+            // Детали для каждого процесса запрашиваются параллельно
+            return await Task.WhenAll(executions.Select(BuildListItemAsync));
+        }
+        catch (RpcException ex) when (ex.Code == RpcException.StatusCode.Unavailable)
+        {
+            throw new TemporalUnavailableException("Сервер Temporal недоступен");
+        }
+    }
+
+    private async Task<ProcessListItem> BuildListItemAsync(WorkflowExecution execution)
+    {
+        var handle = _client.GetWorkflowHandle(execution.Id);
+        var earthquakeId = long.TryParse(execution.Id.AsSpan("earthquake-".Length), out var id) ? id : 0;
+
+        ProcessingState? state = null;
+        ProcessingResult? result = null;
+        string? note = null;
+
+        try
+        {
+            if (execution.Status == WorkflowExecutionStatus.Running)
+            {
+                state = await handle.QueryAsync<ProcessingState>(TemporalNames.StateQuery, [], new WorkflowQueryOptions
+                {
+                    Rpc = new RpcOptions { Timeout = TimeSpan.FromSeconds(2) }
+                });
+            }
+            else if (execution.Status == WorkflowExecutionStatus.Completed)
+            {
+                result = await handle.GetResultAsync<ProcessingResult>();
+            }
+        }
+        catch (Exception)
+        {
+            note = execution.Status == WorkflowExecutionStatus.Running
+                ? "Worker не отвечает, процесс ждёт запуска Worker'а"
+                : "Не удалось получить результат";
+        }
+
+        return new ProcessListItem
+        {
+            EarthquakeId = earthquakeId,
+            WorkflowId = execution.Id,
+            WorkflowStatus = execution.Status.ToString(),
+            StartedAt = new DateTimeOffset(DateTime.SpecifyKind(execution.StartTime, DateTimeKind.Utc)),
+            ClosedAt = execution.CloseTime is { } closed
+                ? new DateTimeOffset(DateTime.SpecifyKind(closed, DateTimeKind.Utc))
+                : null,
+            Stage = state?.Stage,
+            Severity = state?.Severity ?? result?.Severity,
+            Confirmation = state?.Confirmation ?? result?.Confirmation,
+            ConfirmationDeadline = state?.ConfirmationDeadline,
+            Outcome = result?.Outcome ?? state?.Outcome,
+            NotifiedSubscribers = result?.NotifiedSubscribers ?? state?.NotifiedSubscribers ?? 0,
+            BulletinId = result?.BulletinId ?? state?.BulletinId,
+            Note = note,
+            TemporalUiUrl = UiUrl(execution.Id)
+        };
+    }
+
     private string UiUrl(string workflowId) =>
         $"{_configuration["Temporal:UiUrl"]}/namespaces/default/workflows/{workflowId}";
 }

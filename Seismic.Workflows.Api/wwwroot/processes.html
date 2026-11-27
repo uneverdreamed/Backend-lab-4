@@ -1,0 +1,473 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Процессы обработки землетрясений</title>
+    <style>
+        :root {
+            --bg: #0f1419;
+            --card: #182028;
+            --line: #2b3640;
+            --text: #e6e9ed;
+            --muted: #8b97a5;
+            --blue: #3b82f6;
+            --green: #22a35a;
+            --amber: #e0a243;
+            --red: #f06565;
+            --gray: #6b7684;
+            --head: #1d2630;
+            --err-bg: #3a1b1d;
+            --err-line: #6b2b2e;
+            --flash: #3b3418;
+            --link: #6ea8fe;
+            color-scheme: dark;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+        }
+
+        main {
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 24px 16px 48px;
+        }
+
+        h1 {
+            font-size: 22px;
+            margin: 0 0 4px;
+        }
+
+        .sub {
+            color: var(--muted);
+            margin: 0 0 16px;
+        }
+
+        .bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px 16px;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+            .bar label {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                color: var(--muted);
+            }
+
+        input[type=text] {
+            background: var(--card);
+            color: var(--text);
+            padding: 6px 8px;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            font: inherit;
+            width: 200px;
+        }
+
+        button {
+            color: var(--text);
+            font: inherit;
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--line);
+            background: var(--card);
+            cursor: pointer;
+        }
+
+            button:hover {
+                border-color: var(--blue);
+            }
+
+            button.ok {
+                color: var(--green);
+            }
+
+            button.no {
+                color: var(--red);
+            }
+
+            button:disabled {
+                opacity: .5;
+                cursor: default;
+            }
+
+        .spacer {
+            flex: 1;
+        }
+
+        .live {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--muted);
+        }
+
+        .dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: var(--green);
+        }
+
+            .dot.off {
+                background: var(--red);
+            }
+
+            .dot.paused {
+                background: var(--gray);
+            }
+
+        .error {
+            display: none;
+            background: var(--err-bg);
+            color: var(--red);
+            border: 1px solid var(--err-line);
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin-bottom: 12px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 9px 12px;
+            border-bottom: 1px solid var(--line);
+            vertical-align: middle;
+        }
+
+        th {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            color: var(--muted);
+            background: var(--head);
+        }
+
+        tr:last-child td {
+            border-bottom: 0;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 9px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .Running {
+            background: var(--blue);
+        }
+
+        .Completed {
+            background: var(--green);
+        }
+
+        .Failed, .TimedOut, .Terminated {
+            background: var(--red);
+        }
+
+        .Canceled {
+            background: var(--gray);
+        }
+
+        .sev-strong {
+            color: var(--red);
+            font-weight: 600;
+        }
+
+        .sev-moderate {
+            color: var(--amber);
+            font-weight: 600;
+        }
+
+        .muted {
+            color: var(--muted);
+        }
+
+        .note {
+            font-size: 13px;
+            color: var(--amber);
+        }
+
+        tr.flash {
+            animation: flash 1.2s ease-out;
+        }
+
+        @keyframes flash {
+            from {
+                background: var(--flash);
+            }
+
+            to {
+                background: transparent;
+            }
+        }
+
+        .empty {
+            text-align: center;
+            color: var(--muted);
+            padding: 28px;
+        }
+
+        a {
+            color: var(--link);
+            text-decoration: none;
+        }
+
+            a:hover {
+                text-decoration: underline;
+            }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>Процессы обработки землетрясений</h1>
+        <p class="sub">workflow Temporal</p>
+
+        <div class="bar">
+            <label>Сейсмолог: <input type="text" id="seismologist" value="Дежурный сейсмолог"></label>
+            <button id="demo">Запустить 3 демо-события</button>
+            <button id="toggle">Пауза</button>
+            <span class="spacer"></span>
+            <span class="live"><span class="dot" id="dot"></span><span id="status">подключение…</span></span>
+        </div>
+        <div class="error" id="error"></div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Землетрясение</th>
+                    <th>Статус</th>
+                    <th>Стадия</th>
+                    <th>Уровень</th>
+                    <th>Результат</th>
+                    <th>Запущен</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody id="rows"><tr><td colspan="7" class="empty">Загрузка…</td></tr></tbody>
+        </table>
+    </main>
+
+    <script>
+const POLL_MS = 2000;
+const rowsEl = document.getElementById('rows');
+const errorEl = document.getElementById('error');
+const dotEl = document.getElementById('dot');
+const statusEl = document.getElementById('status');
+const toggleBtn = document.getElementById('toggle');
+
+const STAGES = {
+          'started': 'запущен', 'classifying': 'классификация', 'collecting-data': 'сбор данных',
+          'awaiting-confirmation': 'ожидание подтверждения', 'escalating': 'эскалация',
+          'notifying': 'рассылка', 'publishing': 'публикация', 'completed': 'завершён', 'rejected': 'отклонён'
+};
+const OUTCOMES = {
+          'published': 'опубликовано', 'published-unconfirmed': 'опубликовано, не подтверждено', 'rejected': 'ложная тревога'
+};
+const SEVERITY = { 'strong': 'сильное', 'moderate': 'умеренное', 'light': 'слабое' };
+
+let paused = false, timer = null, inFlight = false;
+const rowCache = new Map(); // workflowId -> { tr, sig }
+
+function fmtTime(iso) {
+          return iso ? new Date(iso).toLocaleTimeString('ru-RU') : '';
+}
+
+function stageText(p) {
+          if (p.workflowStatus !== 'Running') return p.workflowStatus === 'Completed' ? STAGES.completed : '—';
+          if (!p.stage) return '—';
+          let text = STAGES[p.stage] || p.stage;
+          if (p.stage === 'awaiting-confirmation' && p.confirmationDeadline) {
+            text += ' до ' + fmtTime(p.confirmationDeadline);
+          }
+          return text;
+}
+
+function resultText(p) {
+          if (!p.outcome) return '';
+          let text = OUTCOMES[p.outcome] || p.outcome;
+          if (p.bulletinId) text += ' · ' + p.bulletinId;
+          return text;
+}
+
+function cell(tr, i) { return tr.children[i]; }
+
+function buildRow(p) {
+          const tr = document.createElement('tr');
+          for (let i = 0; i < 7; i++) tr.appendChild(document.createElement('td'));
+          const link = document.createElement('a');
+          link.target = '_blank'; link.rel = 'noopener';
+          cell(tr, 0).appendChild(link);
+          return tr;
+}
+
+function fillRow(tr, p) {
+          const link = cell(tr, 0).firstChild;
+          link.textContent = '#' + p.earthquakeId;
+          link.href = p.temporalUiUrl;
+          link.title = 'Открыть в Temporal UI';
+
+          const badge = document.createElement('span');
+          badge.className = 'badge ' + p.workflowStatus;
+          badge.textContent = p.workflowStatus;
+          cell(tr, 1).replaceChildren(badge);
+
+          const stage = cell(tr, 2);
+          stage.textContent = stageText(p);
+          if (p.note) {
+            const note = document.createElement('div');
+            note.className = 'note'; note.textContent = p.note;
+            stage.appendChild(note);
+          }
+
+          const sev = cell(tr, 3);
+          sev.textContent = SEVERITY[p.severity] || (p.severity ?? '—');
+          sev.className = p.severity ? 'sev-' + p.severity : 'muted';
+
+          cell(tr, 4).textContent = resultText(p);
+          cell(tr, 5).textContent = new Date(p.startedAt).toLocaleString('ru-RU');
+
+          const actions = cell(tr, 6);
+          actions.replaceChildren();
+          if (p.stage === 'awaiting-confirmation') {
+            actions.append(actionButton(p, 'approve', 'Подтвердить', 'ok'), ' ', actionButton(p, 'reject', 'Отклонить', 'no'));
+          }
+}
+
+function actionButton(p, decision, label, cls) {
+          const b = document.createElement('button');
+          b.className = cls; b.textContent = label;
+          b.onclick = async () => {
+            b.disabled = true;
+            try {
+              const res = await fetch(`/earthquakes/${p.earthquakeId}/confirmation`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  decision, seismologist: document.getElementById('seismologist').value.trim() || 'Дежурный сейсмолог'
+                })
+              });
+              if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+              refresh();
+            } catch (e) {
+              showError('Не удалось отправить решение: ' + e.message);
+              b.disabled = false;
+            }
+          };
+          return b;
+}
+
+function render(list) {
+          const seen = new Set();
+          let prev = null;
+          for (const p of list) {
+            seen.add(p.workflowId);
+            // Строка перерисовывается только если данные изменились
+            const sig = JSON.stringify([p.workflowStatus, p.stage, p.severity, p.outcome, p.bulletinId, p.note, p.confirmationDeadline]);
+            let entry = rowCache.get(p.workflowId);
+            if (!entry) {
+              entry = { tr: buildRow(p), sig: null };
+              rowCache.set(p.workflowId, entry);
+            }
+            if (entry.sig !== sig) {
+              fillRow(entry.tr, p);
+              if (entry.sig !== null) { entry.tr.classList.remove('flash'); void entry.tr.offsetWidth; entry.tr.classList.add('flash'); }
+              entry.sig = sig;
+            }
+            // Порядок строк как в ответе API (новые сверху)
+            const anchor = prev ? prev.nextSibling : rowsEl.firstChild;
+            if (entry.tr !== anchor) rowsEl.insertBefore(entry.tr, anchor);
+            prev = entry.tr;
+          }
+          for (const [id, entry] of rowCache) {
+            if (!seen.has(id)) { entry.tr.remove(); rowCache.delete(id); }
+          }
+          const emptyRow = rowsEl.querySelector('.empty')?.parentElement;
+          if (emptyRow) emptyRow.remove();
+          if (list.length === 0) {
+            rowsEl.innerHTML = '<tr><td colspan="7" class="empty">Процессов пока нет, нужно запустить событие.</td></tr>';
+          }
+}
+
+function showError(msg) { errorEl.textContent = msg; errorEl.style.display = 'block'; }
+function hideError() { errorEl.style.display = 'none'; }
+
+function setStatus(kind, text) {
+          dotEl.className = 'dot' + (kind ? ' ' + kind : '');
+          statusEl.textContent = text;
+}
+
+async function refresh() {
+          if (inFlight) return;
+          inFlight = true;
+          try {
+            const res = await fetch('/earthquakes?limit=30', { cache: 'no-store' });
+            if (!res.ok) {
+              const body = await res.json().catch(() => ({}));
+              throw new Error(body.detail || ('HTTP ' + res.status));
+            }
+            render(await res.json());
+            hideError();
+            setStatus('', 'обновлено ' + new Date().toLocaleTimeString('ru-RU'));
+          } catch (e) {
+            showError('Не удалось получить список: ' + e.message + '. проверить, что API и Temporal Server запущены.');
+            setStatus('off', 'нет связи');
+          } finally {
+            inFlight = false;
+          }
+}
+
+function start() { timer = setInterval(() => { if (!paused && !document.hidden) refresh(); }, POLL_MS); }
+
+toggleBtn.onclick = () => {
+          paused = !paused;
+          toggleBtn.textContent = paused ? 'Продолжить' : 'Пауза';
+          if (paused) setStatus('paused', 'обновление приостановлено'); else refresh();
+};
+
+document.getElementById('demo').onclick = async (e) => {
+          e.target.disabled = true;
+          try {
+            const res = await fetch('/earthquakes/demo-batch', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ count: 3, confirmationTimeoutSeconds: 30 })
+            });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            refresh();
+          } catch (err) {
+            showError('Не удалось запустить демо-события: ' + err.message);
+          } finally {
+            e.target.disabled = false;
+          }
+};
+
+document.addEventListener('visibilitychange', () => { if (!document.hidden && !paused) refresh(); });
+
+refresh();
+start();
+    </script>
+</body>
+</html>
